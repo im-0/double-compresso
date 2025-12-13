@@ -1,0 +1,11 @@
+[toolchain]
+# Do not forget to generate new CI images (both base and caches) after updating this.
+channel = "1.93.0"
+profile = "complete"
+targets = [
+    "x86_64-pc-windows-gnu",
+    "aarch64-pc-windows-gnullvm",
+
+    # RP2350 / Raspberry Pi Pico 2
+    "thumbv8m.main-none-eabihf",
+]

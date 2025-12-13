@@ -1,0 +1,11 @@
+kotlin_dev_just := "cd kotlin && just"
+rust_dev_just := "cd rust && just"
+
+import "ci/just/all.inc.just"
+import "ci/just/conf.inc.just"
+import "ci/just/devcont-inside.inc.just"
+import "ci/just/dir-root.inc.just"
+import "ci/just/wrap-dev-kotlin.inc.just"
+import "ci/just/wrap-dev-rust.inc.just"
+import "ci/just/common-kotlin.inc.just"
+import "ci/just/common-rust.inc.just"

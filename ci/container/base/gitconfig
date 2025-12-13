@@ -1,0 +1,6 @@
+[user]
+    name = Dev Container
+    email = devcontainer@example.org
+
+[alias]
+    plog = log --color --stat

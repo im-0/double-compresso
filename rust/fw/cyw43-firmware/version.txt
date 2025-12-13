@@ -1,0 +1,1 @@
+https://github.com/embassy-rs/embassy/tree/d6a5e151a23dab379d555e5112836d70a2d98618/cyw43-firmware

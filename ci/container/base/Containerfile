@@ -1,0 +1,464 @@
+ARG rocky_version=8
+
+FROM quay.io/rockylinux/rockylinux:${rocky_version}
+
+ARG mingw_sysroot
+ARG mingw_rust_target
+
+ARG mingw_llvm_version="20251216"
+ARG mingw_libusb_version="v1.0.29"
+
+ARG pico_sdk_version="2.2.0"
+ARG pico_sdk_picotool_version="2.2.0-a4"
+
+ARG rust_toolchain_version
+ARG rust_toolchain_profile
+ARG rust_toolchain_targets
+
+ARG android_build_tools_version
+ARG android_platform_version
+ARG android_platform_tools_version
+
+ARG java_version=21
+
+COPY "zzzz-cd-workspaces.sh" "/etc/profile.d/zzzz-cd-workspaces.sh"
+COPY "zzzz-fancy-prompt.sh" "/etc/profile.d/zzzz-fancy-prompt.sh"
+COPY "gitconfig" "/root/.gitconfig"
+RUN mkdir --parents "/root/.config/htop"
+COPY "htoprc" "/root/.config/htop/htoprc"
+RUN mkdir "/workspaces"
+RUN mkdir "/opt/host-tools"
+
+COPY "is_amd64" "/usr/local/bin/is_amd64"
+COPY "is_aarch64" "/usr/local/bin/is_aarch64"
+
+# Make sure that man pages are installed. Needed only on newer Fedora releases.
+RUN sed -i "s,^ *tsflags *= *nodocs *$,," /etc/dnf/dnf.conf
+
+RUN dnf --refresh upgrade --assumeyes
+
+# Enable EPEL and CRB (CodeReady Linux Builder) repositories.
+RUN dnf \
+        install \
+        --assumeyes \
+        "epel-release"
+RUN crb enable
+
+# Quality of life packages.
+RUN dnf \
+        install \
+        --assumeyes \
+        "glibc-langpack-en" \
+        "bash-completion" \
+        "coreutils-common" \
+        "man-db" \
+        "man-pages" \
+        "bat" \
+        "fzf" \
+        "mlocate" \
+        "procps-ng" \
+        "psmisc" \
+        "htop" \
+        "btop" \
+        "iputils" \
+        "iproute" \
+        "moreutils" \
+        "pv" \
+        "mc" \
+        "wget" \
+        "nmap-ncat" \
+        "rsync" \
+        "findutils" \
+        "file" \
+        "xz" \
+        "xz-lzma-compat" \
+        "zstd" \
+        "unzip" \
+        "p7zip" \
+        "p7zip-plugins" \
+        "sqlite" \
+        "vim-enhanced" \
+        "nano" \
+        "bc" \
+        "git" \
+        "diffutils" \
+        "patch" \
+        "strace" \
+        "usbutils"
+
+# Rust-related development tools.
+RUN dnf \
+        install \
+        --assumeyes \
+        "make" \
+        "cmake" \
+        "gcc" \
+        "gcc-c++" \
+        "clang" \
+        "mold" \
+        "gdb" \
+        "rust-gdb" \
+        "lldb" \
+        "rust-lldb"
+
+RUN if is_amd64; then \
+    dnf \
+        install \
+        --assumeyes \
+        "mingw64-gcc" \
+        "mingw64-gcc-c++"; \
+    fi
+
+RUN if is_aarch64; then \
+    git \
+        clone \
+        --branch "${mingw_llvm_version}" \
+        --depth 1 \
+        "https://github.com/mstorsjo/llvm-mingw" \
+        "/root/llvm-mingw"; \
+    fi
+RUN if is_aarch64; then \
+    cd "/root/llvm-mingw" \
+    && TOOLCHAIN_ARCHS="aarch64" ./build-all.sh \
+        --disable-lldb \
+        --disable-lldb-mi \
+        --disable-clang-tools-extra \
+        "/opt/aarch64-w64-mingw32"; \
+    fi
+RUN if is_aarch64; then \
+    rm -rf "/root/llvm-mingw"; \
+    fi
+ENV PATH="/opt/aarch64-w64-mingw32/bin:${PATH}"
+
+# Dependencies for native binaries.
+RUN dnf \
+        install \
+        --assumeyes \
+        "systemd-devel" \
+        "dbus-devel"
+RUN if is_amd64; then \
+    dnf \
+        install \
+        --assumeyes \
+        "mingw64-winpthreads-static"; \
+    fi
+
+# Newer MinGW headers and libraries are required to build mimalloc and probe-rs.
+RUN if is_amd64; then \
+    dnf \
+        upgrade \
+        --assumeyes \
+        "https://dl.rockylinux.org/pub/rocky/9.7/AppStream/$( uname --machine )/os/Packages/m/mingw-filesystem-base-148-7.el9.noarch.rpm" \
+        "https://dl.rockylinux.org/pub/rocky/9.7/CRB/$( uname --machine )/os/Packages/m/mingw64-filesystem-148-7.el9.noarch.rpm" \
+        "https://dl.rockylinux.org/pub/rocky/9.7/CRB/$( uname --machine )/os/Packages/m/mingw64-headers-12.0.0-3.el9.noarch.rpm" \
+        "https://dl.rockylinux.org/pub/rocky/9.7/CRB/$( uname --machine )/os/Packages/m/mingw64-crt-12.0.0-4.el9.noarch.rpm"; \
+    fi
+
+# Tools for generating docker/podman images.
+RUN dnf \
+        install \
+        --assumeyes \
+        "buildah" \
+        "skopeo"
+
+# Python development.
+RUN dnf \
+        install \
+        --assumeyes \
+        "pylint" \
+        "python3-mypy" \
+        "python3-mypy_extensions" \
+        "python3-tomli"
+
+# OpenSSL CLI to generate dummy certificate for APK signing.
+RUN dnf \
+        install \
+        --assumeyes \
+        "openssl"
+
+# Install Raspberry Pi Pico SDK and tools.
+RUN mkdir "/opt/pico-sdk"
+RUN git \
+        clone \
+        --branch "${pico_sdk_version}" \
+        --depth 1 \
+        --recurse-submodules \
+        --shallow-submodules \
+        "https://github.com/raspberrypi/pico-sdk" \
+        "/opt/pico-sdk/pico-sdk-${pico_sdk_version}"
+ENV PICO_SDK_PATH="/opt/pico-sdk/pico-sdk-${pico_sdk_version}"
+
+RUN mkdir "/opt/pico-sdk-tools"
+
+RUN dnf \
+        install \
+        --assumeyes \
+        "libusb-devel" \
+        "autoconf" \
+        "libtool"
+RUN git \
+        clone \
+        --branch "${mingw_libusb_version}" \
+        --depth 1 \
+        "https://github.com/libusb/libusb" \
+        "/root/libusb"
+RUN cd "/root/libusb" \
+    && ./autogen.sh \
+        --host "$( uname --machine )-w64-mingw32" \
+        --target "$( uname --machine )-w64-mingw32" \
+        --prefix "${mingw_sysroot}" \
+        --disable-static
+RUN cd "/root/libusb" \
+    && make
+RUN cd "/root/libusb" \
+    && make install
+RUN $( uname --machine )-w64-mingw32-strip "${mingw_sysroot}/bin/libusb-1.0.dll"
+# CMake needs this when building picotool with clang, for some reason.
+RUN cp "${mingw_sysroot}/lib/libusb-1.0.dll.a" "${mingw_sysroot}/lib/libusb-1.0.a"
+RUN rm -rf "/root/libusb"
+
+RUN wget \
+        --output-document - \
+        "https://github.com/raspberrypi/picotool/releases/download/${pico_sdk_picotool_version}/picotool-${pico_sdk_picotool_version}.tar.gz" \
+    | tar --verbose --gzip --extract --directory "/root"
+# Build for Linux.
+RUN mkdir "/root/picotool-${pico_sdk_picotool_version}/build-linux"
+RUN cd "/root/picotool-${pico_sdk_picotool_version}/build-linux" \
+    && cmake ".."
+RUN cd "/root/picotool-${pico_sdk_picotool_version}/build-linux" \
+    && make
+# Build for Windows.
+COPY "0001-fix-build-with-mingw.patch" "/tmp/0001-fix-build-with-mingw.patch"
+RUN patch \
+        --directory "/root/picotool-${pico_sdk_picotool_version}" \
+        --strip 1 \
+        --input "/tmp/0001-fix-build-with-mingw.patch"
+RUN rm "/tmp/0001-fix-build-with-mingw.patch"
+RUN mkdir "/root/picotool-${pico_sdk_picotool_version}/build-windows"
+RUN cd "/root/picotool-${pico_sdk_picotool_version}/build-windows" \
+    && cmake \
+        -D "CMAKE_SYSTEM_NAME=Windows" \
+        -D "CMAKE_C_COMPILER=$( uname --machine )-w64-mingw32-gcc" \
+        -D "CMAKE_CXX_COMPILER=$( uname --machine )-w64-mingw32-g++" \
+        -D "CMAKE_RC_COMPILER=$( uname --machine )-w64-mingw32-windres" \
+        -D "CMAKE_FIND_ROOT_PATH=${mingw_sysroot}" \
+        -D "CMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER" \
+        -D "CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY" \
+        -D "CMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY" \
+        ".."
+RUN cd "/root/picotool-${pico_sdk_picotool_version}/build-windows" \
+    && make
+RUN cd "/root/picotool-${pico_sdk_picotool_version}/build-windows" \
+    && $( uname --machine )-w64-mingw32-strip "picotool.exe"
+# Copy files.
+RUN mkdir "/opt/pico-sdk-tools/picotool"
+RUN mv "/root/picotool-${pico_sdk_picotool_version}/build-linux/picotool" "/opt/pico-sdk-tools/picotool/"
+RUN mv "/root/picotool-${pico_sdk_picotool_version}/build-windows/picotool.exe" "/opt/host-tools/"
+RUN cp --link "${mingw_sysroot}/bin/libusb-1.0.dll" "/opt/host-tools/"
+RUN cp --link "${mingw_sysroot}/bin/libwinpthread-1.dll" "/opt/host-tools/"
+RUN if is_amd64; then \
+    cp --link "${mingw_sysroot}/bin/libgcc_s_seh-1.dll" "/opt/host-tools/"; \
+    fi
+RUN if is_amd64; then \
+    cp --link "${mingw_sysroot}/bin/libstdc++-6.dll" "/opt/host-tools/"; \
+    fi
+RUN if is_aarch64; then \
+    cp --link "${mingw_sysroot}/bin/libc++.dll" "/opt/host-tools/"; \
+    fi
+RUN if is_aarch64; then \
+    cp --link "${mingw_sysroot}/bin/libunwind.dll" "/opt/host-tools/"; \
+    fi
+RUN cp --link "/opt/pico-sdk-tools/picotool/picotool" "/opt/host-tools/"
+RUN rm -rf "/root/picotool-${pico_sdk_picotool_version}"
+ENV PATH="/opt/pico-sdk-tools/picotool:${PATH}"
+
+RUN mkdir "/root/pioasm-build"
+RUN cd "/root/pioasm-build" \
+    && cmake \
+        "-DPIOASM_VERSION_STRING=${pico_sdk_version}" \
+        "/opt/pico-sdk/pico-sdk-${pico_sdk_version}/tools/pioasm"
+RUN cd "/root/pioasm-build" \
+    && make
+RUN mkdir "/opt/pico-sdk-tools/pioasm"
+RUN mv "/root/pioasm-build/pioasm" "/opt/pico-sdk-tools/pioasm/"
+RUN rm -rf "/root/pioasm-build"
+ENV PATH="/opt/pico-sdk-tools/pioasm:${PATH}"
+
+RUN dnf \
+        install \
+        --assumeyes \
+        "libtool" \
+        "jimtcl-devel" \
+        "capstone-devel" \
+        "hidapi-devel" \
+        "libftdi-devel"
+RUN wget \
+        --output-document - \
+        "https://github.com/raspberrypi/openocd/archive/refs/tags/sdk-${pico_sdk_version}.tar.gz" \
+    | tar --verbose --gzip --extract --directory "/root"
+RUN cd "/root/openocd-sdk-${pico_sdk_version}" \
+    && ./bootstrap
+RUN cd "/root/openocd-sdk-${pico_sdk_version}" \
+    && ./configure
+RUN cd "/root/openocd-sdk-${pico_sdk_version}" \
+    && make
+RUN cd "/root/openocd-sdk-${pico_sdk_version}" \
+    && make install DESTDIR="/opt/pico-sdk-tools/openocd"
+RUN rm -rf "/root/openocd-sdk-${pico_sdk_version}"
+ENV PATH="/opt/pico-sdk-tools/openocd/usr/local/bin:${PATH}"
+ENV OPENOCD_SCRIPTS="/opt/pico-sdk-tools/openocd/usr/local/share/openocd/scripts"
+
+# Install Rust toolchain.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
+        -y \
+        --default-toolchain "${rust_toolchain_version}" \
+        --profile "${rust_toolchain_profile}" \
+        --no-update-default-toolchain \
+        --no-modify-path
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN rustup \
+        target add \
+        --toolchain "${rust_toolchain_version}" \
+        ${rust_toolchain_targets}
+
+RUN rustup completions "bash" >/etc/bash_completion.d/rustup
+RUN rustup completions "bash" "cargo" >/etc/bash_completion.d/cargo
+
+# Install `just`.
+RUN cargo \
+        install \
+        --bins \
+        --all-features \
+        "just"
+RUN just --completions "bash" >/etc/bash_completion.d/just
+
+# Install `wild` linker.
+RUN cargo \
+        install \
+        --bins \
+        "wild-linker"
+
+# Install tools for embedded Rust.
+RUN cargo \
+        install \
+        --bins \
+        --all-features \
+        "cargo-bloat" \
+        "probe-rs-tools" \
+        "flip-link"
+RUN cp --link "/root/.cargo/bin/probe-rs" "/opt/host-tools/"
+
+RUN cargo \
+        install \
+        --bins \
+        --all-features \
+        --git "https://github.com/JoNil/elf2uf2-rs" \
+        --rev "f14bf2d981772cd9fbe5bac33b685719caac1add"
+RUN cp --link "/root/.cargo/bin/elf2uf2-rs" "/opt/host-tools/"
+
+RUN probe-rs complete --shell "bash" install --manual >/etc/bash_completion.d/probe-rs
+
+RUN TARGET_CFLAGS="-D_WIN32_WINNT=0x601" cargo \
+        install \
+        --bin "probe-rs" \
+        --all-features \
+        --target "${mingw_rust_target}" \
+        --root "/root/host-tools" \
+        "probe-rs-tools"
+RUN TARGET_CFLAGS="-D_WIN32_WINNT=0x601" cargo \
+        install \
+        --bin "elf2uf2-rs" \
+        --all-features \
+        --target "${mingw_rust_target}" \
+        --root "/root/host-tools" \
+        "elf2uf2-rs"
+RUN mv "/root/host-tools/bin/probe-rs.exe" "/opt/host-tools/"
+RUN mv "/root/host-tools/bin/elf2uf2-rs.exe" "/opt/host-tools/"
+RUN rm -rf "/root/host-tools"
+
+# Install JDK.
+RUN dnf \
+        install \
+        --assumeyes \
+        "java-${java_version}-openjdk-devel"
+
+# Install tools for Android development.
+RUN dnf \
+        install \
+        --assumeyes \
+        "python3-psutil" \
+        "python3-docopt"
+RUN pip-3 \
+        install \
+        "adb-enhanced"
+
+RUN dnf \
+        install \
+        --assumeyes \
+        "python3-argcomplete" \
+        "python3-requests" \
+        "python3-urllib3"
+RUN pip-3 \
+        install \
+        "sdkmanager"
+
+RUN dnf \
+        install \
+        --assumeyes \
+        "android-tools"
+# ADB installed from Fedora repository crashes inside the container otherwise.
+ENV ADB_LIBUSB=0
+
+ENV ANDROID_HOME="/opt/android-sdk"
+RUN yes y | sdkmanager --licenses
+RUN if is_amd64; then \
+    sdkmanager \
+        --sdk_root "${ANDROID_HOME}" \
+        --install \
+        "build-tools;${android_build_tools_version}" \
+        "platform-tools;${android_platform_tools_version}"; \
+    fi
+RUN sdkmanager \
+        --sdk_root "${ANDROID_HOME}" \
+        --install \
+        "platforms;android-${android_platform_version}"
+ENV PATH="${ANDROID_HOME}/platform-tools:${PATH}"
+
+# Generate dummy certificate for Android app development.
+RUN mkdir "/opt/snakeoil"
+RUN openssl \
+        req \
+        -batch \
+        -x509 \
+        -days 9125 \
+        -subj "/C=XX/ST=Cobrastan/L=Bestburg/O=None/OU=None/CN=example.org" \
+        -newkey "rsa:4096" \
+        -nodes \
+        -sha512 \
+        -keyout "/opt/snakeoil/key.pem" \
+        -out "/opt/snakeoil/cert.pem"
+RUN openssl \
+        pkcs8 \
+        -topk8 \
+        -inform "pem" \
+        -in "/opt/snakeoil/key.pem" \
+        -nocrypt \
+        -outform "der" \
+        -out "/opt/snakeoil/key.pk8"
+
+# Remove caches.
+RUN dnf clean all
+RUN rm -rf "/root/.cargo/registry"
+RUN rm -rf "/root/.cache"
+RUN rm -f /var/log/dnf5.log*
+
+RUN rm "/usr/local/bin/is_amd64"
+RUN rm "/usr/local/bin/is_aarch64"
+
+RUN mandb --create
+RUN updatedb
+
+ENV LANG="en_US.UTF-8"
+ENV JUST_JUSTFILE="justfile.devcontainer.just"
+CMD ["/bin/bash", "--login"]

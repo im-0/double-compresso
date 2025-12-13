@@ -1,0 +1,5 @@
+[versions]
+# Do not forget to generate new CI images (both base and caches) after updating this.
+android_build_tools_version = "35.0.0"
+android_platform_version="36"
+android_platform_tools_version="36.0.2"

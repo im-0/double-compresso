@@ -1,0 +1,267 @@
+[workspace]
+members = [
+    "cli",
+    "fw",
+    "gui",
+]
+
+resolver = "2"
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+
+authors = ["Ivan Mironov <mironov.ivan@gmail.com>"]
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/tara-zero/double-compresso"
+readme = "README.md"
+
+keywords = [
+    "bluetooth",
+]
+categories = [
+    "hardware-support",
+]
+
+[workspace.dependencies.btleplug]
+version = "0.11.8"
+default-features = false
+
+[workspace.dependencies.cortex-m-rt]
+version = "0.7.5"
+default-features = false
+
+[workspace.dependencies.cyw43]
+version = "0.6.0"
+default-features = false
+features = [
+    "defmt",
+    "bluetooth",
+    "firmware-logs",
+]
+
+[workspace.dependencies.cyw43-pio]
+version = "0.9.0"
+default-features = false
+features = [
+    "defmt",
+]
+
+[workspace.dependencies.defmt]
+version = "1.0.1"
+default-features = false
+features = [
+    "encoding-rzcobs",
+]
+
+[workspace.dependencies.defmt-rtt]
+version = "1.1.0"
+default-features = false
+
+[workspace.dependencies.display-interface]
+version = "0.5.0"
+default-features = false
+features = [
+    "defmt-03",  # TODO: Update to defmt-1.
+]
+
+[workspace.dependencies.display-interface-spi]
+version = "0.5.0"
+default-features = false
+
+[workspace.dependencies.eframe]
+version = "0.33.3"
+default-features = false
+features = [
+    "accesskit",
+    "default_fonts",
+    "glow",
+    "persistence",
+    "wayland",
+    "x11",
+]
+
+[workspace.dependencies.egui]
+version = "0.33.3"
+default-features = false
+features = [
+    "default_fonts",
+    "persistence",
+]
+
+[workspace.dependencies.embassy-executor]
+version = "0.9.1"
+default-features = false
+features = [
+    "defmt",
+    "arch-cortex-m",
+    "executor-thread",
+    "executor-interrupt",
+]
+
+[workspace.dependencies.embassy-futures]
+version = "0.1.2"
+default-features = false
+features = [
+    "defmt",
+]
+
+[workspace.dependencies.embassy-rp]
+version = "0.9.0"
+default-features = false
+features = [
+    "rt",
+    "defmt",
+    "critical-section-impl",
+    "unstable-pac",
+    "time-driver",
+    "rom-func-cache",
+    "intrinsics",
+    "rom-v2-intrinsics",
+    "rp235xa",
+    "binary-info",
+]
+
+[workspace.dependencies.embassy-sync]
+version = "0.7.2"
+default-features = false
+features = [
+    "defmt",
+]
+
+[workspace.dependencies.embassy-time]
+version = "0.5.0"
+default-features = false
+features = [
+    "defmt",
+    "defmt-timestamp-uptime-us",
+]
+
+[workspace.dependencies.embedded-graphics]
+version = "0.8.1"
+default-features = false
+features = [
+    "defmt",
+]
+
+[workspace.dependencies.embedded-hal-bus]
+version = "0.3"
+default-features = false
+features = [
+    "async",
+]
+
+[workspace.dependencies.env_logger]
+version = "0.11.8"
+default-features = false
+features = [
+    "auto-color",
+    "humantime",
+    "regex",
+]
+
+[workspace.dependencies.futures]
+version = "0.3.31"
+default-features = false
+features = [
+    "async-await",
+]
+
+[workspace.dependencies.log]
+version = "0.4.29"
+default-features = false
+features = [
+    "std",
+]
+
+[workspace.dependencies.mimalloc]
+version = "0.1.48"
+default-features = false
+features = [
+    "v3",
+]
+
+[workspace.dependencies.oled_async]
+git = "https://github.com/cschuhen/oled_drivers"
+rev = "0aa4b3d03ad69c18aae78bc96f7074059b31f3a3"
+default-features = false
+features = [
+    "graphics",
+    "spi",
+]
+
+[workspace.dependencies.panic-probe]
+version = "1.0.0"
+default-features = false
+features = [
+    "print-defmt",
+]
+
+[workspace.dependencies.rand]
+version = "0.9.2"
+default-features = false
+features = [
+    "small_rng",
+]
+
+[workspace.dependencies.serde]
+version = "1.0.228"
+default-features = false
+features = [
+    "derive",
+    "std",
+]
+
+[workspace.dependencies.static_cell]
+version = "2.1.0"
+default-features = false
+
+[workspace.dependencies.tokio]
+version = "1.49.0"
+default-features = false
+features = [
+    "full",  # TODO: Reduce feature set to a minimal one.
+]
+
+[workspace.dependencies.trouble-host]
+version = "0.5.1"
+features = [
+    "default-packet-pool",
+    "default-packet-pool-mtu-128",
+    "defmt",
+    "peripheral",
+    "gatt",
+    "derive",
+    "l2cap-sdu-reassembly-optimization",
+    #"security",  # TODO: Do we need pairing and security?
+]
+
+[workspace.dependencies.winit]
+version = "0.30.12"
+default-features = false
+features = [
+    "x11",
+    "wayland",
+    "wayland-dlopen",
+    "wayland-csd-adwaita",
+]
+
+[profile.fw-debug]
+inherits = "fw"
+debug-assertions = true
+overflow-checks = true
+lto = false
+codegen-units = 256
+
+[profile.fw-release]
+inherits = "fw"
+debug-assertions = false
+overflow-checks = false
+lto = "fat"
+codegen-units = 1
+
+[profile.fw]
+inherits = "release"
+opt-level = "z"
+debug = "full"
+strip = "none"

@@ -1,0 +1,26 @@
+From 5fccb584fe31a34e8325a2a211bb345029ed770c Mon Sep 17 00:00:00 2001
+From: Ivan Mironov <mironov.ivan@gmail.com>
+Date: Thu, 29 Jan 2026 17:11:22 +0100
+Subject: [PATCH] fix build with mingw
+
+---
+ main.cpp | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/main.cpp b/main.cpp
+index 917c4158c944..a729156e377f 100644
+--- a/main.cpp
++++ b/main.cpp
+@@ -15,9 +15,6 @@
+ #include <cstdio>
+ #include <regex>
+ #include <random>
+-#if !defined(__APPLE__) && !defined(__FreeBSD__)
+-#include <cuchar>
+-#endif
+ #include <cwchar>
+ #include <map>
+ #include <iostream>
+-- 
+2.52.0
+
